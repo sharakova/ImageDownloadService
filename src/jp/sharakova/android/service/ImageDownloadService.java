@@ -4,7 +4,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 
 import jp.sharakova.android.imagedownload.R;
 
@@ -29,10 +28,7 @@ import android.util.Log;
 public class ImageDownloadService extends Service {
 	
     public final static String IMAGE_DOWNLOAD_SERVICE = "jp.sharakova.android.service.ImageDownloadService";
-	private static ArrayList<String> downloadTask = new ArrayList<String>();
     private NotificationManager mNM;
-    private String imageUrl; 
-    private String imageTitle;
     private final IBinder mBinder = new LocalBinder();
     
     public class LocalBinder extends Binder {
@@ -55,49 +51,44 @@ public class ImageDownloadService extends Service {
         if (intent != null && IMAGE_DOWNLOAD_SERVICE.equals(intent.getAction())) {
         	
         	// URLとタイトルを設定する
-        	imageUrl = intent.getStringExtra("image_url");
-        	imageTitle = intent.getStringExtra("image_title");
+        	final String imageUrl = intent.getStringExtra("image_url");
+        	final String imageTitle = intent.getStringExtra("image_title");
         	
-        	// ダウンロードタスクにaddする
-        	downloadTask.add(imageUrl);
-
         	// ダウンロード開始するメッセージをタスクトレイで表示
         	showNotification(imageTitle, imageUrl);
         	
-            Thread downloadThread = new Thread(null, new Runnable() {
+            new Thread(null, new Runnable() {
                 public void run() {
-                	String path = imageUrl;
-                	String title = imageTitle;
                 	String message = null;
                 	try {
                 		// HTTPで画像をダウンロード
                 		DefaultHttpClient httpClient = new DefaultHttpClient();
-        	        	HttpResponse response = httpClient.execute(new HttpGet(path));
+        	        	HttpResponse response = httpClient.execute(new HttpGet(imageUrl));
         	        	InputStream stream = response.getEntity().getContent();
-        	        	ContentResolver contentResolver = getContentResolver();
         	        	
         	        	// ファイルへ保存
-        	        	saveImage(contentResolver, getFileName(path), imageTitle, stream);
+        	        	saveImage(getContentResolver(), getFileName(imageUrl), imageTitle, stream);
         	        	
         	        	// タスクトレイで表示するメッセージ
-        	        	message = title + " download complete.";
+        	        	message = imageTitle + " download complete.";
         	        	
         	        	// コンテンツマネージャーなどのアプリでは、キャッシュをクリアしてやらないと
         	        	// すぐに、画像が表示されないので、メディアマウントをしてやる。
-        	        	sendBroadcast(new Intent(Intent.ACTION_MEDIA_MOUNTED,
-                                Uri.parse("file://" + Environment.getExternalStorageDirectory()))); 
+        	        	sendBroadcast(
+        	        		new Intent(
+        	        			Intent.ACTION_MEDIA_MOUNTED,
+        	        			Uri.parse("file://" + Environment.getExternalStorageDirectory())
+        	        		)
+        	        	);
                 	} catch (Exception e) {
                 		message = "Error.";
                 	} finally {
-                		// ダウンロードのタスクから削除
-       	        		downloadTask.remove(path);
-                		mNM.cancel(path.hashCode());
+                		mNM.cancel(imageUrl.hashCode());
                 		// メッセージをタスクトレイに表示
-                		showNotification(message, path);
+                		showNotification(message, imageUrl);
                 	}
                 }
-            }, "ImageDownloadService");
-            downloadThread.start();
+            }, "ImageDownloadService").start();
         }
     }
 
